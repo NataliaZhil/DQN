@@ -13,7 +13,7 @@ import random
 #import redone
 
 BATCH_SIZE = 32
-PATH_WEIGH = "weights_parab.h5"
+PATH_WEIGH = "weights_parab_True.h5"
 DEVICE = "cuda:0"
 
 
@@ -73,12 +73,12 @@ class Agent:
 
     def __init__(
         self,
-        max_memory: int = 5000,
+        max_memory: int = 10000,
         learn_rate: float = 1e-5,
         load_weight: bool = False,
         expert: bool = True,
     ):
-        self.gamma = 0.99
+        self.gamma = 0.9
         self.memory = collections.deque(maxlen=max_memory)
         self.model = NN(load_weight=load_weight)
         self.optimizer = torch.optim.Adam(
@@ -118,10 +118,13 @@ class Agent:
             q_val = torch.sum(pred * action, dim=1)
         else:
             q_val = pred
+            #target = torch.sum(target * action, dim=1)
+            #print(target)
         self.model.eval()
         self.optimizer.zero_grad()
 
         loss = self.criterion( q_val, target)
+        
         loss.backward()
         self.optimizer.step()
 
