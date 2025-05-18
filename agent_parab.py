@@ -11,11 +11,12 @@ import torch.nn as nn
 import collections
 import random
 #import redone
+import torch.nn.functional as F
 
 BATCH_SIZE = 32
 PATH_WEIGH = "weights_parab_True.h5"
 DEVICE = "cuda:0"
-
+CONST = torch.tensor([[0, 5]], device=DEVICE)
 
 def init_weight(layer):
     if isinstance(layer, nn.Linear) or isinstance(layer, nn.Conv2d):
@@ -28,7 +29,7 @@ class NN(nn.Module):
     def __init__(
         self,
         output_size: int = 2,
-        embedding_size: int = 1024,
+        embedding_size: int = 512,
         load_weight: bool = False,
     ):
         super().__init__()
@@ -52,6 +53,7 @@ class NN(nn.Module):
             nn.Linear(6400, embedding_size),
             nn.ReLU(), 
             nn.Linear(embedding_size, output_size),
+            #nn.Softmax()
         )
 
         if load_weight:
@@ -65,7 +67,10 @@ class NN(nn.Module):
     def forward(self, x):
         x = self.model(x)
         x = x.view(x.size()[0], -1)
-        x = self.pred(x)
+        x = self.pred(x) 
+        #print(x)
+        x -= CONST
+        #print(x)
         return x
 
 
@@ -73,7 +78,7 @@ class Agent:
 
     def __init__(
         self,
-        max_memory: int = 10000,
+        max_memory: int = 8000,
         learn_rate: float = 1e-5,
         load_weight: bool = False,
         expert: bool = True,
@@ -94,7 +99,7 @@ class Agent:
         self.memory.append((s, a, r, n_s, target, done))
             
     def train_step(self, s, a, r, n_s, target, done):
-        self.criterion = nn.CrossEntropyLoss() if self.expert else nn.MSELoss()
+        self.criterion = nn.MSELoss() #if not self.expert else nn.CrossEntropyLoss() 
         state = torch.cat(s) if type(s) is not torch.Tensor else s
         action = torch.cat(a) if type(a) is not torch.Tensor else a
         reward = torch.tensor(r, dtype=torch.float, device=DEVICE)
@@ -102,9 +107,9 @@ class Agent:
         target = torch.cat(target) 
         pred = self.model(state)
         pred_next = self.model(next_state).detach()
-        
-        if not self.expert:
-            target = torch.stack(
+        q_val = torch.sum(pred * action, dim=1)
+        #if not self.expert:
+        target_ql = torch.stack(
                     tuple(
                         (
                             reward[i]
@@ -114,17 +119,20 @@ class Agent:
                         for i in range(BATCH_SIZE)
                     )
                 )
-
-            q_val = torch.sum(pred * action, dim=1)
-        else:
-            q_val = pred
-            #target = torch.sum(target * action, dim=1)
-            #print(target)
+            
+    
+        loss_exper = 0        
+        loss_q = self.criterion(q_val, target_ql)
+        if self.expert:
+            target_exper = torch.sum(target * action, dim=1)
+            loss_exper = self.criterion(q_val, target_exper) 
+            #loss_q *= 0.4
+        #print(loss_exper, loss_q)
         self.model.eval()
         self.optimizer.zero_grad()
 
-        loss = self.criterion( q_val, target)
-        
+        loss = loss_q + loss_exper
+        #print(pred, loss, target_probs)
         loss.backward()
         self.optimizer.step()
 

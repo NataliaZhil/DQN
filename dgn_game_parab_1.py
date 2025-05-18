@@ -57,7 +57,7 @@ class Tube:
     def __init__(self):
         self.tube_up = pygame.image.load("image/tube.png").convert_alpha()
         self.tube_low = pygame.transform.rotate(self.tube_up, ANGLE_TUBE)
-        self.x = 480 #687.9
+        self.x = 460 #687.9
         self.y1 = np.random.randint(*TUBE_HIGH_BEETW)
         self.y2 = np.random.randint(*TUBE_HIGH_BEETW)
 
@@ -245,12 +245,12 @@ def main(game_ag, expert_fb, window):
         state_expert = state_func(
                 bird.y, tube.y1, tube.y2, tube.x, bird.speed)
         
-        target = np.argmax(expert_fb.create_q(state_expert))
+        target = expert_fb.create_q(state_expert)
 
-        target = torch.tensor(target, device=DEVICE).unsqueeze(0)
+        target = torch.tensor(target, device=DEVICE, dtype=torch.float32).unsqueeze(0)
         #print(target)
-        if np.random.random() < game_ag.epsilon:
-            game_ag.epsilon = game_ag.epsilon / 1.02 if game_ag.epsilon > 0 else 0
+        if np.random.random() < game_ag.epsilon and not bird.steps%10:
+            game_ag.epsilon = game_ag.epsilon / 1.001 if game_ag.epsilon > 0 else 0
             final_move = (
                 torch.eye(2)[np.random.choice([0, 1])].to(DEVICE).unsqueeze(0)
             )
@@ -264,7 +264,7 @@ def main(game_ag, expert_fb, window):
         bird.jump(final_move)
         [i.update(window) for i in [back, bird, tube, g_d]]
         if tube.scoring():
-            reward += 1
+            reward += 5
             game_score += 1
         af.score_num(window, game_score)
         bird.speed_up(game_score)
@@ -272,7 +272,9 @@ def main(game_ag, expert_fb, window):
         
         if tube.lost(bird.bird_unit()) or g_d.lost(bird.y, bird.rotation):
             reward = -10
+
             print(target, move_res, game_ag.expert)
+
             lost = True
             if max_sc < game_score:
                 max_sc = game_score
@@ -308,7 +310,7 @@ def draw_for_array(window):
     
     pic = pygame.surfarray.array3d(window)
     #pic = pic[0:560, 0:560]
-    pic = pic[180:, 30:560]
+    pic = pic[180:, :560]
     #cv2.imshow('image', pic)
     pic = cv2.cvtColor(cv2.resize(pic, (128, 128)), cv2.COLOR_BGR2GRAY)
     #cv2.imshow('image', pic)
@@ -329,37 +331,50 @@ def training(epochs: int = 1000, tutor: bool=False, load_ad: bool=False):
     total_score = 0
     score_100 = 0
     z=0
-    agent_fb = agent.Agent(load_weight=load_ad, expert=tutor)
-    agent_fb.epsilon = 0.2 if not load_ad else 0
+    agent_fb = agent.Agent(load_weight=load_ad, expert=tutor,  learn_rate=1e-4)  #expert 10-4
+    agent_fb.epsilon = 0.2 if not load_ad else 0.1
     expert_fb = expert.Agent(load_q=True, path = "expert/weights_exper_ql.npy") 
     window = pygame.display.set_mode((WIDTH, HIGTH), vsync=1)
+    #agent_fb.expert = True
+    treshold = 20
     for epoch in range(epochs):
+        
         score = main(agent_fb, expert_fb, window)
         record = record if score < record else score
         games += 1
         score_100 += score
+        
         if not games % 100:
             torch.save(
                 agent_fb.model.state_dict(), f"weights_parab_{tutor}.h5"
             )
             print("saved")
             z=0
-            print("education")
-            agent_fb.expert = True
-            for _ in range(100):
-                agent_fb.long_memory()
-            score_100 = 0
+            treshold = max(20 - games/100, 10)
+            # print("education")
+            # agent_fb.expert = True
+            # for _ in range(300):
+            #     agent_fb.long_memory()
+            # score_100 = 0
         print(z)
-        if agent_fb.expert and z > 10:
+        
+        print(treshold, z)
+        if not tutor  and z < treshold:
+            print("education")
+            for _ in range(300):
+                agent_fb.long_memory()
             agent_fb.expert = False
+            
         z += 1
-        total_score += score
+        
         
         
         print(
             f"""Game {games}, Score {score},
             Total score {total_score}, Eps{agent_fb.epsilon}"""
         )
+        #if not agent_fb.expert :
+        total_score += score
         score_plot.append(score)
         counter_plot.append(games)
         af.plot_seaborn(counter_plot, score_plot)
@@ -371,5 +386,7 @@ def training(epochs: int = 1000, tutor: bool=False, load_ad: bool=False):
 
 
 if __name__ == "__main__":
-   #training(500, True, False)
-   training(3000, False, True)
+   #training(500, True, False) # 500 epoch
+   training(8000, False, False)
+   
+   #50 epoch - 84
