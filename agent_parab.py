@@ -12,7 +12,6 @@ import random
 
 
 BATCH_SIZE = 32
-PATH_WEIGH = "weights_parab_expert_2000.h5"
 DEVICE = "cuda:0"
 CONST = torch.tensor([[0, 5]], device=DEVICE)
 GAMMA = 0.9
@@ -48,6 +47,7 @@ class NN(nn.Module):
         output_size: int = 2,
         embedding_size: int = 512,
         load_weight: bool = False,
+        path: str = "",
     ):
         super().__init__()
         self.model = nn.Sequential(
@@ -72,7 +72,8 @@ class NN(nn.Module):
         )
 
         if load_weight:
-            self.work = self.load_state_dict(torch.load(PATH_WEIGH))
+            print(path)
+            self.work = self.load_state_dict(torch.load(path))
             print("weigts_loaded")
         else:
             self.model.apply(init_weight)
@@ -108,7 +109,8 @@ class Agent:
     ):
         self.gamma = GAMMA
         self.memory = collections.deque(maxlen=max_memory)
-        self.model = NN(load_weight=load_weight)
+        path = "weights_parab_expert_1000.h5" if expert else "weights_parab_Ql.h5"
+        self.model = NN(load_weight=load_weight, path=path)
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=learn_rate
         )

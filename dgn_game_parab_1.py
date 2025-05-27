@@ -489,7 +489,9 @@ def training(
     expert_fb = expert.Agent(load_q=True, path="expert/weights_exper_ql.npy")
     window = pygame.display.set_mode((WIDTH, HIGTH), vsync=1)
     save_name = (
+
         "weights_parab_expert_1000.h5" if tutor else "weights_parab_Ql.h5"
+
     )
     for epoch in range(epochs):
         score = main(agent_fb, expert_fb, window)
@@ -498,8 +500,8 @@ def training(
         if not games % 100:
             torch.save(agent_fb.model.state_dict(), save_name)
             print("saved")
-        if not tutor:
-            agent_fb.alpha = max(0.2, 1 - games / 900)
+            if not tutor:
+                agent_fb.alpha = max(0.2, 1 - games / 900)
         print(
             f"""Game {games}, Score {score},
             Total score {total_score}, Eps{agent_fb.epsilon},
@@ -518,5 +520,7 @@ def training(
 
 
 if __name__ == "__main__":
-    training(1000, tutor=True, load_ad=False)
-    training(1000, tutor=False, load_ad=False)
+    print("Sop")
+    training(10, tutor=True, load_ad=True, learning=False)
+    print("q_l")
+    training(10, tutor=False, load_ad=True, learning=False)
